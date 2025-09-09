@@ -49,22 +49,28 @@
         </header>
 
         <!-- Controls Section -->
-        <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6 grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-            <div>
-                <label for="processName" class="block text-sm font-medium text-gray-300">Process Name</label>
-                <input type="text" id="processName" class="mono mt-1 block w-full bg-gray-900 border border-gray-700 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-cyan-500 focus:border-cyan-500" placeholder="e.g., P1">
+        <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6">
+            <!-- Top Row: Process Creation -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label for="processName" class="block text-sm font-medium text-gray-300">Process Name</label>
+                    <input type="text" id="processName" class="mono mt-1 block w-full bg-gray-900 border border-gray-700 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-cyan-500 focus:border-cyan-500" placeholder="e.g., Word Processor">
+                </div>
+                <div>
+                    <label for="processCode" class="block text-sm font-medium text-gray-300">Instructions (comma-separated)</label>
+                    <input type="text" id="processCode" class="mono mt-1 block w-full bg-gray-900 border border-gray-700 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-cyan-500 focus:border-cyan-500" placeholder="e.g., EXEC,IO,EXEC,END">
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button id="addProcessBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">Add Process</button>
+                    <button id="loadScenarioBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">Load Scenario</button>
+                </div>
             </div>
-            <div>
-                <label for="processCode" class="block text-sm font-medium text-gray-300">Instructions (comma-separated)</label>
-                <input type="text" id="processCode" class="mono mt-1 block w-full bg-gray-900 border border-gray-700 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-cyan-500 focus:border-cyan-500" placeholder="e.g., EXEC,EXEC,IO,EXEC,END">
-            </div>
-            <div class="flex items-center space-x-2">
-                <button id="addProcessBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">Add Process</button>
-            </div>
-             <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+            <hr class="border-gray-700 my-4">
+            <!-- Bottom Row: Simulation Controls -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
                  <div class="flex items-center space-x-2">
                     <button id="startBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">Start</button>
-                    <button id="stopBtn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">Stop</button>
+                    <button id="stopBtn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300" disabled>Stop</button>
                     <button id="resetBtn" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">Reset</button>
                 </div>
                  <div>
@@ -77,6 +83,7 @@
                 </div>
             </div>
         </div>
+
 
         <!-- Main Simulation Area -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -141,11 +148,20 @@
             </div>
         </div>
 
+        <!-- Post-Simulation Analysis Section -->
+        <div id="analysisSection" class="bg-gray-800 p-4 rounded-lg shadow-lg mt-6 hidden">
+            <h2 class="text-2xl font-bold text-cyan-400 border-b border-gray-700 pb-2 mb-4">Post-Simulation Analysis</h2>
+            <div id="analysisContent" class="space-y-6">
+                <!-- Analysis content will be injected here -->
+            </div>
+        </div>
+
     </div>
 
     <script>
         // DOM Elements
         const addProcessBtn = document.getElementById('addProcessBtn');
+        const loadScenarioBtn = document.getElementById('loadScenarioBtn');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
         const resetBtn = document.getElementById('resetBtn');
@@ -175,7 +191,7 @@
         // --- Core Classes and Functions ---
 
         class Process {
-            constructor(pid, name, code) {
+            constructor(pid, name, code, creationTime) {
                 this.pid = pid;
                 this.name = name;
                 this.code = code.toUpperCase().split(',').map(c => c.trim()).filter(c => c);
@@ -185,6 +201,10 @@
                 this.waitTime = 0; // for I/O
                 this.memoryBase = -1;
                 this.memoryLimit = this.code.length;
+                this.creationTime = creationTime;
+                this.terminationTime = -1;
+                this.stats = { runTime: 0, readyTime: 0, waitTime: 0 };
+                this.history = [];
             }
         }
         
@@ -199,11 +219,12 @@
         function allocateMemory(process) {
             let base = -1;
             // Using a simple first-fit algorithm
-            for(let i=0; i < MEMORY_SIZE - process.memoryLimit; i++) {
+            for(let i=0; i <= MEMORY_SIZE - process.memoryLimit; i++) {
                 let found = true;
                 for(let j=0; j < process.memoryLimit; j++) {
                     if (memory[i+j] !== null) {
                         found = false;
+                        i += j; // Skip ahead
                         break;
                     }
                 }
@@ -218,10 +239,10 @@
                 for(let i=0; i < process.memoryLimit; i++) {
                     memory[base+i] = process.pid;
                 }
-                log(`Memory allocated for PID ${process.pid} at base ${base}.`);
+                log(`Memory allocated for PID ${process.pid} (${process.name}) at base ${base}.`);
                 return true;
             }
-            log(`ERROR: Not enough memory for PID ${process.pid}.`);
+            log(`ERROR: Not enough memory for PID ${process.pid} (${process.name}).`);
             return false;
         }
 
@@ -230,8 +251,26 @@
                 for(let i=0; i < process.memoryLimit; i++) {
                     memory[process.memoryBase + i] = null;
                 }
-                log(`Memory for PID ${process.pid} freed.`);
+                log(`Memory for PID ${process.pid} (${process.name}) freed.`);
                 process.memoryBase = -1;
+            }
+        }
+
+        function createAndQueueProcess(name, code) {
+             if (!code.toUpperCase().includes('END')) {
+                code += ',END';
+            }
+            const newProcess = new Process(pidCounter, name, code, clock);
+            if(allocateMemory(newProcess)) {
+                processes.push(newProcess);
+                newProcess.state = 'Ready';
+                readyQueue.push(pidCounter);
+                log(`Process '${name}' (PID: ${pidCounter}) created and added to Ready Queue.`);
+                pidCounter++;
+                render();
+                return true;
+            } else {
+                return false;
             }
         }
 
@@ -270,7 +309,7 @@
                 block.className = 'w-4 h-4 rounded-sm';
                 if(memory[i] !== null) {
                     const process = processes[memory[i]];
-                    const colors = ['bg-pink-600', 'bg-indigo-600', 'bg-teal-600', 'bg-orange-600', 'bg-purple-600'];
+                    const colors = ['bg-pink-600', 'bg-indigo-600', 'bg-teal-600', 'bg-orange-600', 'bg-purple-600', 'bg-rose-600', 'bg-lime-600'];
                     block.classList.add(colors[process.pid % colors.length]);
                     block.title = `PID: ${process.pid}, Name: ${process.name}`;
                 } else {
@@ -294,7 +333,7 @@
                     <div class="text-xs mt-1">Time Slice: ${process.timeSlice}</div>
                  `;
              }
-             const colors = ['border-pink-500', 'border-indigo-500', 'border-teal-500', 'border-orange-500', 'border-purple-500'];
+             const colors = ['border-pink-500', 'border-indigo-500', 'border-teal-500', 'border-orange-500', 'border-purple-500', 'border-rose-500', 'border-lime-500'];
              const color = colors[process.pid % colors.length];
              return `
                 <div class="process-box p-2 rounded-lg bg-gray-700 border-2 ${color} w-full text-center">
@@ -303,10 +342,77 @@
              `;
         }
 
+        function renderAnalysis() {
+            const analysisSection = document.getElementById('analysisSection');
+            const analysisContent = document.getElementById('analysisContent');
+            const completedProcesses = processes.filter(p => p.terminationTime !== -1 || p.history.length > 0);
+            
+            if (completedProcesses.length === 0) {
+                 analysisSection.classList.add('hidden');
+                 return;
+            }
+
+            analysisSection.classList.remove('hidden');
+
+            // --- 1. Performance Metrics Table ---
+            let tableHTML = `
+                <h3 class="text-xl font-semibold mb-2 text-gray-300">Performance Metrics</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm mono mb-6">
+                        <thead class="bg-gray-700">
+                            <tr>
+                                <th class="p-2">PID</th>
+                                <th class="p-2">Name</th>
+                                <th class="p-2">Turnaround Time</th>
+                                <th class="p-2">CPU Time</th>
+                                <th class="p-2">I/O Wait Time</th>
+                                <th class="p-2">Ready Wait Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+            completedProcesses.forEach(p => {
+                const turnaround = (p.terminationTime !== -1 ? p.terminationTime : clock) - p.creationTime;
+                tableHTML += `<tr class="border-b border-gray-700">
+                    <td class="p-2">${p.pid}</td>
+                    <td class="p-2">${p.name}</td>
+                    <td class="p-2">${turnaround}</td>
+                    <td class="p-2">${p.stats.runTime}</td>
+                    <td class="p-2">${p.stats.waitTime}</td>
+                    <td class="p-2">${p.stats.readyTime}</td>
+                </tr>`;
+            });
+            tableHTML += `</tbody></table></div>`;
+            
+            // --- 2. Process State Timeline ---
+            let timelinesHTML = `<h3 class="text-xl font-semibold mb-3 text-gray-300">Process State Timeline</h3>`;
+            completedProcesses.forEach(p => {
+                timelinesHTML += `<div class="mb-4">
+                    <div class="font-bold mono mb-1">${p.name} (PID: ${p.pid})</div>
+                    <div class="flex flex-wrap gap-px bg-gray-900 p-1 rounded">`;
+                p.history.forEach((state, time) => {
+                    const stateClass = `state-${state.toLowerCase()}`;
+                    timelinesHTML += `<div class="h-5 w-2 ${stateClass}" title="Time: ${p.creationTime + time + 1}, State: ${state}"></div>`;
+                });
+                timelinesHTML += `</div></div>`;
+            });
+
+            analysisContent.innerHTML = tableHTML + timelinesHTML;
+        }
+
         // --- Simulation Logic ---
 
         function simulationStep() {
             clock++;
+            
+            // Record history and update stats
+            processes.forEach(p => {
+                if(p.state !== 'Terminated') {
+                    p.history.push(p.state);
+                    if(p.state === 'Running') p.stats.runTime++;
+                    else if(p.state === 'Ready') p.stats.readyTime++;
+                    else if(p.state === 'Waiting') p.stats.waitTime++;
+                }
+            });
 
             // 1. Handle waiting processes
             for (let i = waitingQueue.length - 1; i >= 0; i--) {
@@ -318,7 +424,7 @@
                     const movedProcess = processes[movedPid];
                     movedProcess.state = 'Ready';
                     readyQueue.push(movedPid);
-                    log(`I/O COMPLETE: PID ${movedPid} (${movedProcess.name}) moved from Waiting to Ready queue.`);
+                    log(`I/O COMPLETE: '${movedProcess.name}' moved from Waiting to Ready queue.`);
                 }
             }
 
@@ -327,7 +433,6 @@
                 const process = runningProcess;
                 process.timeSlice--;
 
-                // Execute instruction
                 const instruction = process.code[process.pc];
                 
                 let processFinished = false;
@@ -340,7 +445,7 @@
                     ioInterrupt = true;
                 }
                 
-                process.pc++;
+                if(!processFinished) process.pc++;
 
                 if (process.pc >= process.code.length) {
                     processFinished = true;
@@ -352,22 +457,22 @@
 
                 if (processFinished) {
                     process.state = 'Terminated';
-                    log(`PROCESS FINISHED: PID ${process.pid} (${process.name}) has terminated.`);
+                    process.terminationTime = clock;
+                    log(`PROCESS FINISHED: '${process.name}' has terminated.`);
                     freeMemory(process);
                     runningProcess = null;
                 } else if (ioInterrupt) {
-                    log(`I/O INTERRUPT: PID ${process.pid} (${process.name}) requested I/O.`);
+                    log(`I/O INTERRUPT: '${process.name}' requested I/O (e.g., reading a file).`);
                     process.state = 'Waiting';
                     process.waitTime = 5; // Simulate 5 clock ticks for I/O
                     waitingQueue.push(process.pid);
                     runningProcess = null;
                 } else if (timerInterrupt) {
-                    log(`TIMER INTERRUPT: Time slice for PID ${process.pid} (${process.name}) expired.`);
+                    log(`TIMER INTERRUPT: Time slice for '${process.name}' expired. Preempting.`);
                     process.state = 'Ready';
                     readyQueue.push(process.pid);
                     runningProcess = null;
                 }
-
             }
 
             // 3. Scheduler: If CPU is idle and there's a ready process, schedule it
@@ -376,45 +481,61 @@
                 runningProcess = processes[nextPid];
                 runningProcess.state = 'Running';
                 runningProcess.timeSlice = parseInt(timeSliceInput.value);
-                log(`CONTEXT SWITCH: CPU starts executing PID ${runningProcess.pid} (${runningProcess.name}).`);
+                log(`CONTEXT SWITCH: CPU starts executing '${runningProcess.name}'.`);
             }
 
             render();
+
+            // Check if simulation is over
+            const allTerminated = processes.length > 0 && processes.every(p => p.state === 'Terminated');
+            if (allTerminated && simulationInterval) {
+                stopBtn.click();
+                log("All processes have terminated. Showing analysis.");
+                renderAnalysis();
+            }
         }
 
         // --- Event Listeners ---
-
         addProcessBtn.addEventListener('click', () => {
             const name = document.getElementById('processName').value || `Process-${pidCounter}`;
             let code = document.getElementById('processCode').value;
             if (!code) {
-                code = "EXEC,EXEC,IO,EXEC,EXEC,EXEC,END"; // Default code
+                alert("Please provide instructions for the process.");
+                return;
             }
-            if (!code.toUpperCase().includes('END')) {
-                code += ',END';
-            }
-
-            const newProcess = new Process(pidCounter, name, code);
-            if(allocateMemory(newProcess)) {
-                processes.push(newProcess);
-                newProcess.state = 'Ready';
-                readyQueue.push(pidCounter);
-                log(`Process ${name} (PID: ${pidCounter}) created and added to Ready Queue.`);
-                pidCounter++;
-                render();
-                 // Clear inputs
+            
+            if (createAndQueueProcess(name, code)) {
+                // Clear inputs on success
                 document.getElementById('processName').value = '';
                 document.getElementById('processCode').value = '';
+                document.getElementById('analysisSection').classList.add('hidden');
             } else {
                 alert("Failed to create process: Not enough memory!");
             }
         });
 
+        loadScenarioBtn.addEventListener('click', () => {
+            resetBtn.click();
+            log("Loading demo scenario...");
+            const scenario = [
+                { name: 'Word Processor', code: 'EXEC,EXEC,IO,EXEC,EXEC,EXEC,END' }, // Mixed use
+                { name: 'File Downloader', code: 'IO,IO,EXEC,IO,IO,EXEC,END' }, // I/O Bound
+                { name: 'Game Renderer', code: 'EXEC,EXEC,EXEC,EXEC,EXEC,EXEC,END' }, // CPU Bound
+                { name: 'Music Streamer', code: 'IO,EXEC,IO,EXEC,IO,EXEC,END' } // Frequent, short bursts
+            ];
+            scenario.forEach(p => createAndQueueProcess(p.name, p.code));
+            document.getElementById('analysisSection').classList.add('hidden');
+
+        });
+
         startBtn.addEventListener('click', () => {
             if (!simulationInterval) {
+                document.getElementById('analysisSection').classList.add('hidden');
                 simulationInterval = setInterval(simulationStep, simulationSpeed);
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
+                addProcessBtn.disabled = true;
+                loadScenarioBtn.disabled = true;
                 log("Simulation started.");
             }
         });
@@ -425,12 +546,19 @@
                 simulationInterval = null;
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
-                log("Simulation stopped.");
+                addProcessBtn.disabled = false;
+                loadScenarioBtn.disabled = false;
+                log("Simulation paused.");
+                renderAnalysis();
             }
         });
         
         resetBtn.addEventListener('click', () => {
-            stopBtn.click();
+            if (simulationInterval) {
+                stopBtn.click();
+            } else {
+                 renderAnalysis();
+            }
             processes = [];
             readyQueue = [];
             waitingQueue = [];
@@ -452,9 +580,10 @@
         });
         
         // Initial setup
-        log("Simulator initialized. Add processes and start simulation.");
+        log("Simulator initialized. Add processes or load a scenario.");
         render();
 
     </script>
 </body>
 </html>
+
