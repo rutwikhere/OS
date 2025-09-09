@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OS Process Flow Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* Tailwind gray-900 */
+        }
+        .mono {
+            font-family: 'Roboto Mono', monospace;
+        }
+        .process-box {
+            transition: all 0.5s ease-in-out;
+        }
+        .state-ready { background-color: #ca8a04; /* Tailwind yellow-500 */ }
+        .state-running { background-color: #16a34a; /* Tailwind green-600 */ }
+        .state-waiting { background-color: #dc2626; /* Tailwind red-600 */ }
+        .state-terminated { background-color: #4b5563; /* Tailwind gray-600 */ }
+        .state-new { background-color: #3b82f6; /* Tailwind blue-500 */ }
+
+        /* Custom scrollbar for a better look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937; /* gray-800 */
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563; /* gray-600 */
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280; /* gray-500 */
+        }
+    </style>
+</head>
+<body class="text-gray-200">
+
+    <div class="container mx-auto p-4 max-w-7xl">
+        <header class="text-center mb-6">
+            <h1 class="text-4xl font-bold text-cyan-400">OS Process Flow Simulator</h1>
+            <p class="text-gray-400 mt-2">Visualize process scheduling, execution, and interrupts on a simulated CPU and Memory.</p>
+        </header>
+
+        <!-- Controls Section -->
+        <div class="bg-gray-800 p-4 rounded-lg shadow-lg mb-6 grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div>
+                <label for="processName" class="block text-sm font-medium text-gray-300">Process Name</label>
+                <input type="text" id="processName" class="mono mt-1 block w-full bg-gray-900 border border-gray-700 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-cyan-500 focus:border-cyan-500" placeholder="e.g., P1">
+            </div>
+            <div>
+                <label for="processCode" class="block text-sm font-medium text-gray-300">Instructions (comma-separated)</label>
+                <input type="text" id="processCode" class="mono mt-1 block w-full bg-gray-900 border border-gray-700 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-cyan-500 focus:border-cyan-500" placeholder="e.g., EXEC,EXEC,IO,EXEC,END">
+            </div>
+            <div class="flex items-center space-x-2">
+                <button id="addProcessBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">Add Process</button>
+            </div>
+             <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                 <div class="flex items-center space-x-2">
+                    <button id="startBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">Start</button>
+                    <button id="stopBtn" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">Stop</button>
+                    <button id="resetBtn" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">Reset</button>
+                </div>
+                 <div>
+                    <label for="speedRange" class="block text-sm font-medium text-gray-300">Simulation Speed</label>
+                    <input type="range" id="speedRange" min="100" max="2000" value="1000" step="100" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                 </div>
+                 <div>
+                    <label for="timeSlice" class="block text-sm font-medium text-gray-300">Time Slice (for Round Robin)</label>
+                    <input type="number" id="timeSlice" value="3" min="1" class="mono mt-1 block w-full bg-gray-900 border border-gray-700 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-cyan-500 focus:border-cyan-500">
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Simulation Area -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Column: Queues and CPU -->
+            <div class="lg:col-span-2 flex flex-col gap-6">
+                <!-- CPU -->
+                <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+                    <h2 class="text-xl font-semibold mb-3 text-cyan-400 border-b border-gray-700 pb-2">CPU</h2>
+                    <div id="cpu" class="h-40 bg-gray-900 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-700">
+                        <span class="text-gray-500">IDLE</span>
+                    </div>
+                </div>
+
+                <!-- Queues -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+                        <h2 class="text-xl font-semibold mb-3 text-cyan-400 border-b border-gray-700 pb-2">Ready Queue</h2>
+                        <div id="readyQueue" class="min-h-[100px] bg-gray-900 rounded-lg p-2 flex flex-wrap gap-2"></div>
+                    </div>
+                    <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+                        <h2 class="text-xl font-semibold mb-3 text-cyan-400 border-b border-gray-700 pb-2">Waiting (I/O) Queue</h2>
+                        <div id="waitingQueue" class="min-h-[100px] bg-gray-900 rounded-lg p-2 flex flex-wrap gap-2"></div>
+                    </div>
+                </div>
+                
+                 <!-- Memory -->
+                <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+                    <h2 class="text-xl font-semibold mb-3 text-cyan-400 border-b border-gray-700 pb-2">Primary Memory (RAM)</h2>
+                    <div id="memory" class="min-h-[100px] bg-gray-900 rounded-lg p-2 flex flex-wrap gap-1"></div>
+                </div>
+            </div>
+
+            <!-- Right Column: Process Table & Log -->
+            <div class="flex flex-col gap-6">
+                 <!-- Process Table -->
+                <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+                    <h2 class="text-xl font-semibold mb-3 text-cyan-400 border-b border-gray-700 pb-2">Process Control Blocks</h2>
+                    <div class="h-64 overflow-y-auto">
+                        <table class="w-full text-left text-sm mono">
+                            <thead class="sticky top-0 bg-gray-800">
+                                <tr>
+                                    <th class="p-2">PID</th>
+                                    <th class="p-2">Name</th>
+                                    <th class="p-2">State</th>
+                                    <th class="p-2">PC</th>
+                                </tr>
+                            </thead>
+                            <tbody id="processTableBody">
+                                <!-- Process rows will be injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- System Log -->
+                <div class="bg-gray-800 p-4 rounded-lg shadow-lg flex-grow flex flex-col">
+                    <h2 class="text-xl font-semibold mb-3 text-cyan-400 border-b border-gray-700 pb-2">System Log</h2>
+                    <div id="systemLog" class="mono text-xs flex-grow bg-black rounded-lg p-2 overflow-y-auto h-96">
+                        <!-- Log messages appear here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // DOM Elements
+        const addProcessBtn = document.getElementById('addProcessBtn');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const speedRange = document.getElementById('speedRange');
+        const timeSliceInput = document.getElementById('timeSlice');
+        
+        const cpuElement = document.getElementById('cpu');
+        const readyQueueElement = document.getElementById('readyQueue');
+        const waitingQueueElement = document.getElementById('waitingQueue');
+        const memoryElement = document.getElementById('memory');
+        const processTableBody = document.getElementById('processTableBody');
+        const systemLog = document.getElementById('systemLog');
+        
+        // Simulation State
+        let processes = [];
+        let readyQueue = [];
+        let waitingQueue = [];
+        let runningProcess = null;
+        let pidCounter = 0;
+        let simulationInterval = null;
+        let simulationSpeed = 1000;
+        let clock = 0;
+
+        const MEMORY_SIZE = 100;
+        let memory = new Array(MEMORY_SIZE).fill(null);
+
+        // --- Core Classes and Functions ---
+
+        class Process {
+            constructor(pid, name, code) {
+                this.pid = pid;
+                this.name = name;
+                this.code = code.toUpperCase().split(',').map(c => c.trim()).filter(c => c);
+                this.state = 'New'; // New, Ready, Running, Waiting, Terminated
+                this.pc = 0; // Program Counter
+                this.timeSlice = 0;
+                this.waitTime = 0; // for I/O
+                this.memoryBase = -1;
+                this.memoryLimit = this.code.length;
+            }
+        }
+        
+        function log(message) {
+            const timestamp = `[${clock.toString().padStart(4, '0')}]`;
+            const logEntry = document.createElement('div');
+            logEntry.textContent = `${timestamp} ${message}`;
+            systemLog.appendChild(logEntry);
+            systemLog.scrollTop = systemLog.scrollHeight;
+        }
+
+        function allocateMemory(process) {
+            let base = -1;
+            // Using a simple first-fit algorithm
+            for(let i=0; i < MEMORY_SIZE - process.memoryLimit; i++) {
+                let found = true;
+                for(let j=0; j < process.memoryLimit; j++) {
+                    if (memory[i+j] !== null) {
+                        found = false;
+                        break;
+                    }
+                }
+                if (found) {
+                    base = i;
+                    break;
+                }
+            }
+
+            if (base !== -1) {
+                process.memoryBase = base;
+                for(let i=0; i < process.memoryLimit; i++) {
+                    memory[base+i] = process.pid;
+                }
+                log(`Memory allocated for PID ${process.pid} at base ${base}.`);
+                return true;
+            }
+            log(`ERROR: Not enough memory for PID ${process.pid}.`);
+            return false;
+        }
+
+        function freeMemory(process) {
+            if (process.memoryBase !== -1) {
+                for(let i=0; i < process.memoryLimit; i++) {
+                    memory[process.memoryBase + i] = null;
+                }
+                log(`Memory for PID ${process.pid} freed.`);
+                process.memoryBase = -1;
+            }
+        }
+
+        // --- UI Rendering ---
+        
+        function render() {
+            // Render Process Table
+            processTableBody.innerHTML = '';
+            processes.forEach(p => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-700';
+                row.innerHTML = `
+                    <td class="p-2">${p.pid}</td>
+                    <td class="p-2">${p.name}</td>
+                    <td class="p-2"><span class="px-2 py-1 rounded text-white text-xs font-bold state-${p.state.toLowerCase()}">${p.state}</span></td>
+                    <td class="p-2">${p.pc} / ${p.code.length}</td>
+                `;
+                processTableBody.appendChild(row);
+            });
+
+            // Render CPU
+            if (runningProcess) {
+                cpuElement.innerHTML = createProcessHTML(runningProcess, true);
+            } else {
+                cpuElement.innerHTML = `<span class="text-gray-500">IDLE</span>`;
+            }
+
+            // Render Queues
+            readyQueueElement.innerHTML = readyQueue.map(pid => createProcessHTML(processes[pid])).join('');
+            waitingQueueElement.innerHTML = waitingQueue.map(pid => createProcessHTML(processes[pid])).join('');
+            
+            // Render Memory
+            memoryElement.innerHTML = '';
+            for(let i=0; i < MEMORY_SIZE; i++) {
+                const block = document.createElement('div');
+                block.className = 'w-4 h-4 rounded-sm';
+                if(memory[i] !== null) {
+                    const process = processes[memory[i]];
+                    const colors = ['bg-pink-600', 'bg-indigo-600', 'bg-teal-600', 'bg-orange-600', 'bg-purple-600'];
+                    block.classList.add(colors[process.pid % colors.length]);
+                    block.title = `PID: ${process.pid}, Name: ${process.name}`;
+                } else {
+                     block.classList.add('bg-gray-700');
+                }
+                memoryElement.appendChild(block);
+            }
+        }
+
+        function createProcessHTML(process, isCpu = false) {
+             if (!process) return '';
+             let details = `
+                <div class="font-bold text-sm">${process.name} (PID: ${process.pid})</div>
+                <div class="text-xs">State: ${process.state}</div>
+             `;
+             if (isCpu) {
+                 const currentInstruction = process.code[process.pc] || 'DONE';
+                 details += `
+                    <div class="text-xs mt-2">PC: ${process.pc}</div>
+                    <div class="mono text-cyan-400 text-sm">Executing: ${currentInstruction}</div>
+                    <div class="text-xs mt-1">Time Slice: ${process.timeSlice}</div>
+                 `;
+             }
+             const colors = ['border-pink-500', 'border-indigo-500', 'border-teal-500', 'border-orange-500', 'border-purple-500'];
+             const color = colors[process.pid % colors.length];
+             return `
+                <div class="process-box p-2 rounded-lg bg-gray-700 border-2 ${color} w-full text-center">
+                   ${details}
+                </div>
+             `;
+        }
+
+        // --- Simulation Logic ---
+
+        function simulationStep() {
+            clock++;
+
+            // 1. Handle waiting processes
+            for (let i = waitingQueue.length - 1; i >= 0; i--) {
+                const pid = waitingQueue[i];
+                const process = processes[pid];
+                process.waitTime--;
+                if (process.waitTime <= 0) {
+                    const [movedPid] = waitingQueue.splice(i, 1);
+                    const movedProcess = processes[movedPid];
+                    movedProcess.state = 'Ready';
+                    readyQueue.push(movedPid);
+                    log(`I/O COMPLETE: PID ${movedPid} (${movedProcess.name}) moved from Waiting to Ready queue.`);
+                }
+            }
+
+            // 2. Handle running process
+            if (runningProcess) {
+                const process = runningProcess;
+                process.timeSlice--;
+
+                // Execute instruction
+                const instruction = process.code[process.pc];
+                
+                let processFinished = false;
+                let ioInterrupt = false;
+                let timerInterrupt = false;
+
+                if (!instruction || instruction === 'END') {
+                    processFinished = true;
+                } else if (instruction === 'IO') {
+                    ioInterrupt = true;
+                }
+                
+                process.pc++;
+
+                if (process.pc >= process.code.length) {
+                    processFinished = true;
+                }
+
+                if (process.timeSlice <= 0 && !processFinished && !ioInterrupt) {
+                    timerInterrupt = true;
+                }
+
+                if (processFinished) {
+                    process.state = 'Terminated';
+                    log(`PROCESS FINISHED: PID ${process.pid} (${process.name}) has terminated.`);
+                    freeMemory(process);
+                    runningProcess = null;
+                } else if (ioInterrupt) {
+                    log(`I/O INTERRUPT: PID ${process.pid} (${process.name}) requested I/O.`);
+                    process.state = 'Waiting';
+                    process.waitTime = 5; // Simulate 5 clock ticks for I/O
+                    waitingQueue.push(process.pid);
+                    runningProcess = null;
+                } else if (timerInterrupt) {
+                    log(`TIMER INTERRUPT: Time slice for PID ${process.pid} (${process.name}) expired.`);
+                    process.state = 'Ready';
+                    readyQueue.push(process.pid);
+                    runningProcess = null;
+                }
+
+            }
+
+            // 3. Scheduler: If CPU is idle and there's a ready process, schedule it
+            if (!runningProcess && readyQueue.length > 0) {
+                const nextPid = readyQueue.shift();
+                runningProcess = processes[nextPid];
+                runningProcess.state = 'Running';
+                runningProcess.timeSlice = parseInt(timeSliceInput.value);
+                log(`CONTEXT SWITCH: CPU starts executing PID ${runningProcess.pid} (${runningProcess.name}).`);
+            }
+
+            render();
+        }
+
+        // --- Event Listeners ---
+
+        addProcessBtn.addEventListener('click', () => {
+            const name = document.getElementById('processName').value || `Process-${pidCounter}`;
+            let code = document.getElementById('processCode').value;
+            if (!code) {
+                code = "EXEC,EXEC,IO,EXEC,EXEC,EXEC,END"; // Default code
+            }
+            if (!code.toUpperCase().includes('END')) {
+                code += ',END';
+            }
+
+            const newProcess = new Process(pidCounter, name, code);
+            if(allocateMemory(newProcess)) {
+                processes.push(newProcess);
+                newProcess.state = 'Ready';
+                readyQueue.push(pidCounter);
+                log(`Process ${name} (PID: ${pidCounter}) created and added to Ready Queue.`);
+                pidCounter++;
+                render();
+                 // Clear inputs
+                document.getElementById('processName').value = '';
+                document.getElementById('processCode').value = '';
+            } else {
+                alert("Failed to create process: Not enough memory!");
+            }
+        });
+
+        startBtn.addEventListener('click', () => {
+            if (!simulationInterval) {
+                simulationInterval = setInterval(simulationStep, simulationSpeed);
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                log("Simulation started.");
+            }
+        });
+        
+        stopBtn.addEventListener('click', () => {
+            if (simulationInterval) {
+                clearInterval(simulationInterval);
+                simulationInterval = null;
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                log("Simulation stopped.");
+            }
+        });
+        
+        resetBtn.addEventListener('click', () => {
+            stopBtn.click();
+            processes = [];
+            readyQueue = [];
+            waitingQueue = [];
+            runningProcess = null;
+            pidCounter = 0;
+            clock = 0;
+            memory.fill(null);
+            systemLog.innerHTML = '';
+            log("System reset.");
+            render();
+        });
+
+        speedRange.addEventListener('input', (e) => {
+            simulationSpeed = 2100 - e.target.value;
+            if (simulationInterval) {
+                stopBtn.click();
+                startBtn.click();
+            }
+        });
+        
+        // Initial setup
+        log("Simulator initialized. Add processes and start simulation.");
+        render();
+
+    </script>
+</body>
+</html>
